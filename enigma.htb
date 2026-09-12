@@ -1,0 +1,15 @@
+* enumera puertos y enumera el RPC (remote procedure call) - premita ejecutar codigo remoto
+
+* conenctate a NFS (Network File System [samba linux]) monta una particion y obtene el pdf
+
+* encutra el PDF y analizalo
+
+* utilza el CVE-2025-69212 para ganar una webshell
+
+* usando python3 upgradea la shell a una pty
+
+* usa mysql para obtener los hash bcrypt del usuario haris
+
+* crackea con jonh y usa su contraseña para con "su" en tu pty saltar a el
+
+**** toma la user.txt

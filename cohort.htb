@@ -1,0 +1,10 @@
+* investiga la web de cohort.htb
+* crea un servidor que redirecciones a http://localhost/status
+  - esto hara que puedas apuntar a localhost:3000 y la redireccion se vaya a http://remote/status
+  - esto te va a chibar una redireccion a una instancia de marimo
+* utiliza websocat para acceder a un RCE abusando de CVE-2026-39987
+  - esto te da la user.txt
+* haz upgrade a tu shell con python, es importante ya que sin esto el CVE no puede spawnear la nueva root shell
+  - python3 -c "import pty; pty.spown('/bin/bash')"
+* enumera con linpeas y revisa los CVEs, hay uno que se llama Pack2TheRoot — CVE-2026-41651
+  - ejecuta el CVE y gana acceso a la root.txt

