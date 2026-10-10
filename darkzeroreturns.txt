@@ -67,5 +67,6 @@ jobs:
 
 * crea una nueva rama y sublea. Usa la nueva rama para crear un PUll request ya que esto dispara el CI 
 
-? (Creo que que tambien se ejecuta con pushes a ramas. pero no se)
+* investigando con tu nuevo usuario vas a encontrar un ccache en temp para el usuario. madalo a tu maquina  y usalo
+
 
